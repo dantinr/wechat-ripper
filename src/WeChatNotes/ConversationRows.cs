@@ -10,7 +10,7 @@ internal static class ConversationRows
         if (!calibration.Valid || image.Size != new Size(calibration.WindowWidth, calibration.WindowHeight)) return [];
         int left = calibration.X + (int)(calibration.Height * 1.2), right = calibration.X + calibration.Width - 13;
         if (right - left < 60) return [];
-        var separators = new List<int>();
+        var edges = new List<(int Top, int Contrast)>();
         static int Light(Color c) => (c.R * 299 + c.G * 587 + c.B * 114) / 1000;
         for (int y = calibration.Y + 1; y < image.Height - 11; y++)
         {
@@ -24,7 +24,22 @@ internal static class ConversationRows
             // A hand-drawn calibration may put one edge sample just outside the divider.
             if (line.Count(value => Math.Abs(value - middle) <= 3) < 8) continue;
             int up = above.Order().ElementAt(4) - middle, down = below.Order().ElementAt(4) - middle;
-            if (Math.Abs(up) is >= 3 and <= 35 && Math.Abs(down) is >= 3 and <= 35 && Math.Sign(up) == Math.Sign(down)) separators.Add(y + 1);
+            if (Math.Abs(up) is >= 3 and <= 35 && Math.Abs(down) is >= 3 and <= 35 && Math.Sign(up) == Math.Sign(down)) edges.Add((y + 1, Math.Abs(up) + Math.Abs(down)));
+        }
+        // Antialiasing and capture ringing can produce several thin edges around
+        // one divider. They are one piece of evidence, not several row boundaries.
+        // Keep the strongest edge before estimating height and voting on the grid.
+        var separators = new List<int>();
+        int mergeDistance = Math.Clamp(calibration.Height / 8, 3, 8);
+        for (int i = 0; i < edges.Count; i++)
+        {
+            var strongest = edges[i];
+            while (i + 1 < edges.Count && edges[i + 1].Top - edges[i].Top <= mergeDistance)
+            {
+                i++;
+                if (edges[i].Contrast > strongest.Contrast) strongest = edges[i];
+            }
+            separators.Add(strongest.Top);
         }
         int height = calibration.Height;
         var heights = separators.Zip(separators.Skip(1), (first, second) => second - first)

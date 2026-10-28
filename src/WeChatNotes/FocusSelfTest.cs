@@ -56,6 +56,24 @@ internal static class FocusSelfTest
             check("选中行遮住分隔线仍保留该群标题区域", rows.Contains(new Rectangle(60, 498, 240, 65)) && FocusCalibration.NameBand(rows.Single(r => r.Top == 498)).Top > 498);
             check("校准行高少量偏差由重复分隔线修正", ConversationRows.Locate(scrolled, calibration with { Height = 63 }).SequenceEqual(rows));
             graphics.Clear(Color.FromArgb(230, 230, 232));
+            using (var halo = new Pen(Color.FromArgb(227, 227, 229)))
+            {
+                for (int top = 108; top < 890; top += 65)
+                {
+                    graphics.DrawLine(separator, 139, top - 1, 287, top - 1);
+                    foreach (int offset in new[] { -5, -3, 3, 5 }) graphics.DrawLine(halo, 139, top - 1 + offset, 287, top - 1 + offset);
+                }
+                check("同一分隔线的多重细边缘不干扰会话行定位", ConversationRows.Locate(scrolled, calibration).SequenceEqual(rows));
+                check("边缘合并后仍能校正少量校准行高误差", ConversationRows.Locate(scrolled, calibration with { Height = 63 }).SequenceEqual(rows));
+                graphics.Clear(Color.FromArgb(230, 230, 232));
+                foreach (int top in new[] { 108, 173 })
+                {
+                    graphics.DrawLine(separator, 139, top - 1, 287, top - 1);
+                    foreach (int offset in new[] { -5, -3, 3, 5 }) graphics.DrawLine(halo, 139, top - 1 + offset, 287, top - 1 + offset);
+                }
+                check("重复边缘不能把两条分隔线伪装成足够的行证据", ConversationRows.Locate(scrolled, calibration).Length == 0);
+            }
+            graphics.Clear(Color.FromArgb(230, 230, 232));
             graphics.DrawLine(separator, 139, 107, 287, 107); graphics.DrawLine(separator, 139, 172, 287, 172);
             check("不足三条分隔线不猜测会话行或误用消息摘要", ConversationRows.Locate(scrolled, calibration).Length == 0);
             for (int top = 238; top < 890; top += 65) graphics.DrawLine(separator, 139, top - 1, 287, top - 1);

@@ -221,7 +221,7 @@ internal sealed class WeChatListAutomation : IDisposable
             return SameName(await ocr.ReadAsync(normalized), name);
         }
         var rows = ConversationRows.Locate(image, calibration);
-        if (rows.Length == 0) return new("未识别到会话行，请关闭微信搜索或弹窗后重试");
+        if (rows.Length == 0) return new("会话行定位失败，请确认列表可见并滚动或重新校准");
         var matches = new List<Rectangle>();
         for (int index = 0; index < rows.Length; index++)
         {
