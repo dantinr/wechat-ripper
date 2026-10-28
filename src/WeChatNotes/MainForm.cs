@@ -6,6 +6,8 @@ public sealed class MainForm : Form
 {
     private readonly Store store;
     private readonly RawRecorder recorder;
+    private readonly FocusController focus;
+    private FocusDialog? focusDialog;
     private readonly System.Windows.Forms.Timer timer = new();
     private CancellationTokenSource cancellation = new();
     private readonly DataGridView targets = Grid();
@@ -36,7 +38,7 @@ public sealed class MainForm : Form
 
     public MainForm(Store store)
     {
-        this.store = store; recorder = new(store); captures = new(store);
+        this.store = store; recorder = new(store); captures = new(store); focus = new(store.Root);
         Text = $"Ripper v{Application.ProductVersion}"; Width = 1380; Height = 940; MinimumSize = new(1060, 760);
         StartPosition = FormStartPosition.CenterScreen; Font = new("Microsoft YaHei UI", 10);
         BackColor = Color.FromArgb(246, 248, 250);
@@ -100,7 +102,12 @@ public sealed class MainForm : Form
         layout.Controls.Add(footer, 0, 5); Controls.Add(layout);
         MainMenuStrip = new AppMenu(
             () => { using var model = new SpeechModelDialog(store.Root); model.ShowDialog(this); },
-            () => { using var about = new AboutDialog(); about.ShowDialog(this); }) { Font = Font, BackColor = BackColor };
+            () => { using var about = new AboutDialog(); about.ShowDialog(this); },
+            () =>
+            {
+                if (focusDialog == null || focusDialog.IsDisposed) focusDialog = new(store, focus);
+                focusDialog.Show(this); focusDialog.Activate();
+            }) { Font = Font, BackColor = BackColor };
         Controls.Add(MainMenuStrip);
         interval.ValueChanged += (_, _) => timer.Interval = (int)interval.Value * 1000;
         timer.Interval = (int)interval.Value * 1000; timer.Tick += async (_, _) => await Poll();
@@ -118,9 +125,15 @@ public sealed class MainForm : Form
         };
         recorder.Recorded += RefreshRecords;
         FormClosing += ClosingAsync;
-        FormClosed += (_, _) => { targetMenu.Dispose(); timer.Dispose(); cancellation.Dispose(); recorder.Dispose(); };
+        FormClosed += (_, _) => { focusDialog?.Dispose(); focus.Dispose(); targetMenu.Dispose(); timer.Dispose(); cancellation.Dispose(); recorder.Dispose(); };
         Shown += (_, _) => split.SplitterDistance = Math.Clamp((int)(split.ClientSize.Width * .58), split.Panel1MinSize, split.ClientSize.Width - split.Panel2MinSize - split.SplitterWidth);
         Shown += (_, _) => UpdateAccountProfile();
+        Shown += (_, _) =>
+        {
+            if (focus.PendingCount == 0) return;
+            footer.Text = $"上次还有 {focus.PendingCount} 个群待恢复，请在会话隐藏设置中点击“停止并恢复”。";
+            focusDialog = new(store, focus); focusDialog.Show(this);
+        };
         RefreshTargets(); RefreshRecords();
     }
 
@@ -386,6 +399,13 @@ public sealed class MainForm : Form
         if (allowClose) return;
         e.Cancel = true; if (closing) return;
         closing = true; Enabled = false;
+        await focus.StopAsync();
+        if (focus.PendingCount > 0)
+        {
+            closing = false; Enabled = true;
+            MessageBox.Show(this, $"还有 {focus.PendingCount} 个微信群未恢复，已取消退出。\n请打开“设置 → 会话隐藏（实验）”，查看状态，清空微信搜索框后点击“停止并恢复”。\n也可在微信中手动搜索打开对应群后重试。", "请先恢复会话", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         if (exporting) footer.Text = "正在等待后台导出完成，随后退出…";
         await PauseAndDrain();
         if (activeExport != null) await activeExport;

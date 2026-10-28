@@ -14,7 +14,7 @@ $wechatNotesReportName = if ($Standalone) { 'raw-tests-standalone.json' } else {
 
 # Fresh staging only: never zip an existing user's installation or data directory.
 $wechatNotesForbidden = @(Get-ChildItem -LiteralPath $wechatNotesApp -Recurse -File | Where-Object {
-    $_.Extension -in @('.db', '.sqlite3', '.lnk', '.dmp', '.log') -or $_.Name -match '(?i)(^keys.*\.json$|raw-probe|诊断|本机只读|\.db-(wal|shm)$|^ggml-.*\.bin$|^speech-model\.json$)'
+    $_.Extension -in @('.db', '.sqlite3', '.lnk', '.dmp', '.log') -or $_.Name -match '(?i)(^keys.*\.json$|raw-probe|诊断|本机只读|\.db-(wal|shm)$|^ggml-.*\.bin$|^speech-(model|settings)\.json$|^focus-(settings|restore)\.json$)'
 })
 if ($wechatNotesForbidden.Count -gt 0) { throw '发布目录含本机数据、模型文件或诊断文件，已停止打包。' }
 $wechatNotesBinarySuffix = if ($Standalone) { 'win-x64-standalone' } else { 'win-x64' }

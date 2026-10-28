@@ -173,6 +173,8 @@ internal static class RawSelfTest
             TranscriptionSelfTest.Run(root, Check);
             SpeechBackendSelfTest.Run(root, Check);
             MenuSettingsSelfTest.Run(root, report, Check);
+            FocusSelfTest.Run(root, report, Check);
+            WindowMessageSelfTest.Run(Check);
             if (Environment.GetEnvironmentVariable("RIPPER_TEST_SPEECH_MODEL") is { Length: > 0 } speechModel &&
                 Environment.GetEnvironmentVariable("RIPPER_TEST_SPEECH_WAV") is { Length: > 0 } speechWave)
             {
