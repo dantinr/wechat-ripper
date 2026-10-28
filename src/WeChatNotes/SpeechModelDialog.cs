@@ -16,20 +16,48 @@ internal sealed class SpeechModelDialog : Form
 
     internal SpeechModelDialog(string root)
     {
-        Text = "离线语音转文字"; ClientSize = new(720, 360); Font = new("Microsoft YaHei UI", 10);
+        Text = "模型设置"; ClientSize = new(720, 470); Font = new("Microsoft YaHei UI", 10);
         StartPosition = FormStartPosition.CenterParent; FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new(22), ColumnCount = 1, RowCount = 6 };
-        foreach (int height in new[] { 100, 28, 40, 30, 55, 46 }) layout.RowStyles.Add(new(SizeType.Absolute, height));
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new(22), ColumnCount = 1, RowCount = 7 };
+        foreach (int height in new[] { 100, 110, 28, 40, 30, 55, 46 }) layout.RowStyles.Add(new(SizeType.Absolute, height));
         layout.Controls.Add(new Label { Dock = DockStyle.Fill, Text = "发布包不含识别模型，可选择提前下载的文件，或由程序自动下载。\nWhisper Small 多语言模型 · 支持中文 · 约 488 MB（466 MiB）\n设置路径后直接使用原文件，无需复制；识别全程离线，语音不上传。\n离线识别需要 Windows 11 或更新版本及 VC++ 2022 x64 运行库。" }, 0, 0);
-        layout.Controls.Add(new Label { Text = "模型文件路径", Dock = DockStyle.Fill }, 0, 1);
+        var settings = SpeechSettings.Load(root);
+        var gpu = new CheckBox { Text = "启用 GPU 加速", Checked = settings.GpuEnabled, AutoSize = true, AccessibleName = "启用GPU加速", Enabled = SpeechModel.Supported };
+        var parallel = new NumericUpDown { Minimum = 1, Maximum = 8, Value = settings.CpuParallelism, Width = 55, AccessibleName = "语音转写并发数", Enabled = SpeechModel.Supported };
+        var options = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        row.Controls.Add(gpu); row.Controls.Add(new Label { Text = "CPU并发", AutoSize = true, Padding = new(16, 3, 0, 0) }); row.Controls.Add(parallel);
+        options.Controls.Add(row);
+        var optionStatus = new Label { AutoSize = true, MaximumSize = new(660, 0), ForeColor = Color.DimGray, Text = "启用时自动尝试 GPU（单路），不可用则回退 CPU；关闭时仅使用 CPU。\nGPU 和并发设置自动保存，对下次导出生效。" };
+        options.Controls.Add(optionStatus); layout.Controls.Add(options, 0, 1);
+        bool restoring = false;
+        void SaveOptions()
+        {
+            if (restoring) return;
+            try
+            {
+                var changed = new SpeechSettings(gpu.Checked, (int)parallel.Value);
+                changed.Save(root); settings = changed;
+                optionStatus.Text = "已自动保存，对下次导出生效。" + (settings.GpuEnabled ? "GPU 单路，不可用时回退 CPU。" : "GPU 已关闭，仅使用 CPU。");
+                optionStatus.ForeColor = Color.DimGray;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                restoring = true; gpu.Checked = settings.GpuEnabled; parallel.Value = settings.CpuParallelism; restoring = false;
+                optionStatus.Text = "设置未保存，已恢复原值。请检查数据目录权限或磁盘空间。";
+                optionStatus.ForeColor = Color.Firebrick;
+            }
+        }
+        gpu.CheckedChanged += (_, _) => SaveOptions(); parallel.ValueChanged += (_, _) => SaveOptions();
+        layout.Controls.Add(new Label { Text = "模型文件路径", Dock = DockStyle.Fill }, 0, 2);
         var location = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         location.ColumnStyles.Add(new(SizeType.Percent, 100)); location.ColumnStyles.Add(new(SizeType.AutoSize));
         modelPath.Text = SpeechModel.PathFor(root);
-        location.Controls.Add(modelPath, 0, 0); location.Controls.Add(browse, 1, 0); layout.Controls.Add(location, 0, 2);
-        layout.Controls.Add(progress, 0, 3); layout.Controls.Add(status, 0, 4);
+        location.Controls.Add(modelPath, 0, 0); location.Controls.Add(browse, 1, 0); layout.Controls.Add(location, 0, 3);
+        layout.Controls.Add(progress, 0, 4); layout.Controls.Add(status, 0, 5);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        buttons.Controls.AddRange([download, use, cancel]); layout.Controls.Add(buttons, 0, 5); Controls.Add(layout);
+        buttons.Controls.AddRange([download, use, cancel]); layout.Controls.Add(buttons, 0, 6); Controls.Add(layout);
         status.Text = !SpeechModel.Supported ? "当前系统不支持离线识别，可继续导出文字与音频。" : SpeechModel.Exists(root) ? "已找到模型；保存并使用时会校验文件。" : "请选择已下载的 ggml-small.bin，或点击自动下载。";
         download.Enabled = browse.Enabled = modelPath.Enabled = use.Enabled = SpeechModel.Supported;
         use.Click += async (_, _) => await Prepare(false);

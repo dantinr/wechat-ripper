@@ -90,7 +90,7 @@ internal static class TranscriptionSelfTest
         using (var modelDialog = new SpeechModelDialog(settings) { Opacity = 0, ShowInTaskbar = false })
         using (var closeDialog = new System.Windows.Forms.Timer { Interval = 100 })
         {
-            Descendants(modelDialog).OfType<TextBox>().Single().Text = Path.Combine(data, "not-found.bin");
+            Descendants(modelDialog).OfType<TextBox>().Single(c => c.AccessibleName == "语音模型路径").Text = Path.Combine(data, "not-found.bin");
             modelDialog.Shown += (_, _) => { Descendants(modelDialog).OfType<Button>().Single(b => b.Text == "保存并使用").PerformClick(); closeDialog.Start(); };
             closeDialog.Tick += (_, _) => { closeDialog.Stop(); modelDialog.Close(); };
             modelDialog.ShowDialog();
@@ -186,8 +186,8 @@ internal static class TranscriptionSelfTest
         VoiceTranscript Serial(string path) { lock (sync) peak = Math.Max(peak, ++active); Thread.Sleep(5); lock (sync) active--; return new("单路结果", "已离线转写"); }
         Exporter.Export(store, Path.Combine(root, "serial-export"), "parallel", Read, null, Serial, 1);
         check("可切换单路转写并限制异常配置范围", peak == 1 && new VoiceTranscriptionOptions("model", 0).Parallelism == 1 && new VoiceTranscriptionOptions("model", 99).Parallelism == 8);
-        using var form = new MainForm(store) { Opacity = 0, ShowInTaskbar = false };
+        using var form = new SpeechModelDialog(store.Root) { Opacity = 0, ShowInTaskbar = false };
         var control = Descendants(form).OfType<NumericUpDown>().Single(c => c.AccessibleName == "语音转写并发数");
-        check("主界面默认四路并支持调整一至八路", control.Value == 4 && control.Minimum == 1 && control.Maximum == 8);
+        check("模型设置默认四路并支持调整一至八路", control.Value == 4 && control.Minimum == 1 && control.Maximum == 8);
     }
 }

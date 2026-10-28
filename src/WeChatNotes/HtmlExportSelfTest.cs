@@ -61,7 +61,8 @@ internal static class HtmlExportSelfTest
         check("HTML提供文件定位相对路径及缺失附件说明", html.Contains("定位文件 ↗") && decoded.Contains("尚未下载的附件.txt") && html.Contains("附件未导出") && html.Contains("<code>附件/"));
         var fileIndex = JsonSerializer.Deserialize<ExportFileIndex>(File.ReadAllText(Path.Combine(moved, ExportFileLocator.IndexName)))!;
         check("HTML资源管理器链接使用可移动相对路径及导出索引并保留浏览目录", Guid.TryParseExact(fileIndex.Id, "N", out _) && fileIndex.Files.Length == 2 && fileIndex.Files.All(p => File.Exists(Path.Combine(moved, p))) && html.Contains("data-export-id=\"" + fileIndex.Id + "\"") && html.Contains("data-locate=\"") && html.Contains("ripper-locate://file/") && html.Contains("浏览目录 ↗") && !html.Contains(root));
-        check("HTML支持本地音频播放转写并保留原文来源", html.Contains("<audio controls preload=none") && decoded.Contains("明天下午三点开会") && html.Contains("语音转写") && html.Contains("原文与来源") && store.Captures().All(c => c.VoiceTranscription == null));
+        string voiceBubble = Regex.Match(html, "<article[^>]+data-kind=\"voice\"[\\s\\S]*?</article>").Value;
+        check("HTML语音保留转写和播放器并移除文件卡片及转换说明", voiceBubble.Contains("<audio controls preload=none") && WebUtility.HtmlDecode(voiceBubble).Contains("明天下午三点开会") && voiceBubble.Contains("语音转写") && voiceBubble.Contains("原文与来源") && !voiceBubble.Contains("class=file") && !voiceBubble.Contains("class=hint") && store.Captures().All(c => c.VoiceTranscription == null));
         check("HTML全部写完后才报告导出完成并提供生成进度", progress.Any(p => p is { Stage: "生成 HTML 聊天目录", Completed: 57, Total: 57 }) && progress.Last().Stage == "导出完成" && html.EndsWith("</script></body></html>" + Environment.NewLine));
         string empty = Path.Combine(root, "html-empty"); Exporter.Export(store, empty, "absent");
         check("空会话仍生成可打开的HTML目录", File.ReadAllText(Path.Combine(empty, "聊天记录.html")).Contains("共 0 条记录") && !File.ReadAllText(Path.Combine(empty, "聊天记录.html")).Contains("<article "));

@@ -65,17 +65,6 @@ internal static class SpeechBackendSelfTest
         var start = GpuSpeechWorker.CreateStartInfo();
         check("GPU使用隐藏独立进程和重定向管道而不经Shell传递语音", start.CreateNoWindow && !start.UseShellExecute && start.RedirectStandardInput && start.RedirectStandardOutput && start.RedirectStandardError && start.ArgumentList.Last() == "--speech-worker" && !start.Arguments.Contains("missing-model"));
 
-        using var store = new Store(Path.Combine(root, "speech-device-ui"));
-        using var form = new MainForm(store) { Opacity = 0, ShowInTaskbar = false };
-        IEnumerable<Control> Descendants(Control parent) => parent.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(Descendants(c)));
-        var controls = Descendants(form).ToArray();
-        var selection = controls.OfType<ComboBox>().Single(c => c.AccessibleName == "语音识别设备");
-        var parallelism = controls.OfType<NumericUpDown>().Single(c => c.AccessibleName == "语音转写并发数");
-        bool automatic = selection.SelectedIndex == 0 && selection.Items.Cast<string>().SequenceEqual(["自动", "CPU", "GPU"]);
-        selection.SelectedIndex = 2;
-        bool gpuSingle = !parallelism.Enabled;
-        selection.SelectedIndex = 1;
-        check("界面默认自动检测且GPU单路与CPU并发设置相互独立", automatic && gpuSingle && parallelism.Value == 4 && parallelism.Enabled == SpeechModel.Supported);
     }
 
     internal static void RunModel(string root, string modelPath, string wave, string report, Action<string, bool> check)

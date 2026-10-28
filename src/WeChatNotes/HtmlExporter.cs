@@ -70,10 +70,8 @@ internal static class HtmlExporter
                 if (voice.RelativePath is { } path)
                 {
                     if (Path.GetExtension(path).ToLowerInvariant() is ".wav" or ".mp3" or ".ogg")
-                        html.WriteLine($"<audio controls preload=none src=\"{Href(path)}\">请通过下方链接打开音频。</audio>");
-                    WriteFile(html, path, voice.Name, "语音文件");
-                    if (voice.OriginalPath is { } original) WriteFile(html, original, Path.GetFileName(original), "原始 SILK");
-                    html.WriteLine($"<p class=hint>{H(voice.Status)}</p>");
+                        html.WriteLine($"<audio controls preload=none src=\"{Href(path)}\"><a href=\"{Href(path)}\" target=_blank rel=noopener>播放语音 ↗</a></audio>");
+                    else html.WriteLine($"<a href=\"{Href(path)}\" target=_blank rel=noopener>打开语音 ↗</a><p class=notice>{H(voice.Status)}</p>");
                 }
                 else html.WriteLine($"<p class=notice>语音未导出：{H(voice.Status)}</p>");
             }
