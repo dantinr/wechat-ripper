@@ -54,6 +54,7 @@ if ($Standalone) { $wechatNotesLauncher = "@echo off`r`n`"%~dp0Ripper.exe`"`r`ni
 else { $wechatNotesLauncher = "@echo off`r`ndotnet `"%~dp0Ripper.dll`"`r`nif errorlevel 1 pause`r`n" }
 [System.IO.File]::WriteAllText((Join-Path $wechatNotesOutput '启动.cmd'), $wechatNotesLauncher, [System.Text.Encoding]::ASCII)
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $wechatNotesOutput '使用说明.md') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs') -Destination $wechatNotesOutput -Recurse -Force
 foreach ($wechatNotesNotice in @('LICENSE', 'THIRD_PARTY_NOTICES.md', 'VERSION')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $wechatNotesNotice) -Destination $wechatNotesOutput -Force
 }
@@ -65,9 +66,10 @@ $wechatNotesSource = Join-Path $wechatNotesOutput 'source'
 $wechatNotesSourceProject = Join-Path $wechatNotesSource 'src\WeChatNotes'
 New-Item -ItemType Directory -Path $wechatNotesSourceProject -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src\WeChatNotes') -File | Copy-Item -Destination $wechatNotesSourceProject -Force
-foreach ($wechatNotesSourceFile in @('LICENSE', 'README.md', 'VERSION', 'THIRD_PARTY_NOTICES.md', 'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md', 'build.ps1', 'test.ps1', 'package.ps1', 'global.json', '.gitignore', '.gitattributes', '.editorconfig')) {
+foreach ($wechatNotesSourceFile in @('LICENSE', 'README.md', 'AGENTS.md', 'VERSION', 'THIRD_PARTY_NOTICES.md', 'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md', 'build.ps1', 'test.ps1', 'package.ps1', 'global.json', '.gitignore', '.gitattributes', '.editorconfig')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $wechatNotesSourceFile) -Destination $wechatNotesSource -Force
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '.github') -Destination $wechatNotesSource -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs') -Destination $wechatNotesSource -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'native') -Destination $wechatNotesSource -Recurse -Force
 Write-Host "程序已生成：$wechatNotesOutput"
