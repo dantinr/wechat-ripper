@@ -42,7 +42,7 @@ internal sealed class ExportProgressView : UserControl
     internal void SetProgress(ExportProgress progress)
     {
         if (!active || IsDisposed) return;
-        stage.Text = $"正在导出「{conversation}」· {progress.Stage}" + (string.IsNullOrEmpty(progress.Detail) ? "" : " · " + progress.Detail);
+        stage.Text = $"正在导出「{progress.Conversation ?? conversation}」· {progress.Stage}" + (string.IsNullOrEmpty(progress.Detail) ? "" : " · " + progress.Detail);
         if (progress.Percent is int percent)
         {
             // Recognition may take minutes before any recording finishes; keep activity visible
@@ -61,7 +61,7 @@ internal sealed class ExportProgressView : UserControl
         UpdateElapsed();
     }
 
-    internal void Complete(Exception? failure)
+    internal void Complete(Exception? failure, BatchExportResult? batch = null)
     {
         active = false; timer.Stop(); watch.Stop();
         bar.Style = ProgressBarStyle.Continuous; bar.Value = failure == null ? 100 : 0;
@@ -69,6 +69,12 @@ internal sealed class ExportProgressView : UserControl
         stage.ForeColor = failure == null ? Color.FromArgb(24, 100, 65) : Color.Firebrick;
         counts.Text = failure == null ? "点击“打开目录”查看导出文件" : "可重试导出；目录可能包含未完成的文件";
         open.Enabled = Directory.Exists(folder); UpdateElapsed();
+        if (failure == null && batch != null)
+        {
+            stage.Text = $"「{conversation}」导出结束 · {batch.Summary}";
+            stage.ForeColor = batch.Failed == 0 ? Color.FromArgb(24, 100, 65) : Color.Firebrick;
+            counts.Text = "打开目录查看“导出结果.txt”";
+        }
     }
 
     private void UpdateElapsed() => elapsed.Text = $"用时 {(int)watch.Elapsed.TotalMinutes:00}:{watch.Elapsed.Seconds:00}";

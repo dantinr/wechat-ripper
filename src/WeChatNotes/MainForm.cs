@@ -6,8 +6,6 @@ public sealed class MainForm : Form
 {
     private readonly Store store;
     private readonly RawRecorder recorder;
-    private readonly FocusController focus;
-    private FocusDialog? focusDialog;
     private readonly System.Windows.Forms.Timer timer = new();
     private CancellationTokenSource cancellation = new();
     private readonly DataGridView targets = Grid();
@@ -25,6 +23,7 @@ public sealed class MainForm : Form
     private readonly Button start;
     private readonly Button once;
     private readonly Button exportCurrent;
+    private readonly Button exportAll;
     private readonly ExportProgressView exportProgress = new();
     private readonly RowStyle exportProgressRow = new(SizeType.Absolute, 0);
     private readonly CheckBox transcribeVoices = new() { Text = "语音转文字（离线）", AutoSize = true, Checked = SpeechModel.Supported, Enabled = SpeechModel.Supported, Padding = new(8, 6, 0, 0) };
@@ -38,7 +37,7 @@ public sealed class MainForm : Form
 
     public MainForm(Store store)
     {
-        this.store = store; recorder = new(store); captures = new(store); focus = new(store.Root);
+        this.store = store; recorder = new(store); captures = new(store);
         Text = $"Ripper v{Application.ProductVersion}"; Width = 1380; Height = 940; MinimumSize = new(1060, 760);
         StartPosition = FormStartPosition.CenterScreen; Font = new("Microsoft YaHei UI", 10);
         BackColor = Color.FromArgb(246, 248, 250);
@@ -84,6 +83,8 @@ public sealed class MainForm : Form
         var recordsToolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0, 3, 0, 0) };
         exportCurrent = Button("导出当前聊天记录", Export); exportCurrent.Enabled = false;
         recordsToolbar.Controls.Add(exportCurrent); recordsLayout.Controls.Add(recordsToolbar, 0, 0);
+        exportAll = Button("导出全部会话", ExportAll); exportAll.Enabled = false;
+        recordsToolbar.Controls.Add(exportAll);
         recordsToolbar.Controls.Add(transcribeVoices);
         recordsTab.Controls.Add(recordsLayout);
         var split = new SplitContainer { Dock = DockStyle.Fill, Size = new(1200, 500), SplitterDistance = 700, Panel1MinSize = 350, Panel2MinSize = 300 };
@@ -102,12 +103,7 @@ public sealed class MainForm : Form
         layout.Controls.Add(footer, 0, 5); Controls.Add(layout);
         MainMenuStrip = new AppMenu(
             () => { using var model = new SpeechModelDialog(store.Root); model.ShowDialog(this); },
-            () => { using var about = new AboutDialog(); about.ShowDialog(this); },
-            () =>
-            {
-                if (focusDialog == null || focusDialog.IsDisposed) focusDialog = new(store, focus);
-                focusDialog.Show(this); focusDialog.Activate();
-            }) { Font = Font, BackColor = BackColor };
+            () => { using var about = new AboutDialog(); about.ShowDialog(this); }) { Font = Font, BackColor = BackColor };
         Controls.Add(MainMenuStrip);
         interval.ValueChanged += (_, _) => timer.Interval = (int)interval.Value * 1000;
         timer.Interval = (int)interval.Value * 1000; timer.Tick += async (_, _) => await Poll();
@@ -125,15 +121,9 @@ public sealed class MainForm : Form
         };
         recorder.Recorded += RefreshRecords;
         FormClosing += ClosingAsync;
-        FormClosed += (_, _) => { focusDialog?.Dispose(); focus.Dispose(); targetMenu.Dispose(); timer.Dispose(); cancellation.Dispose(); recorder.Dispose(); };
+        FormClosed += (_, _) => { targetMenu.Dispose(); timer.Dispose(); cancellation.Dispose(); recorder.Dispose(); };
         Shown += (_, _) => split.SplitterDistance = Math.Clamp((int)(split.ClientSize.Width * .58), split.Panel1MinSize, split.ClientSize.Width - split.Panel2MinSize - split.SplitterWidth);
         Shown += (_, _) => UpdateAccountProfile();
-        Shown += (_, _) =>
-        {
-            if (focus.PendingCount == 0) return;
-            footer.Text = $"上次还有 {focus.PendingCount} 个群待恢复，请在会话隐藏设置中点击“停止并恢复”。";
-            focusDialog = new(store, focus); focusDialog.Show(this);
-        };
         RefreshTargets(); RefreshRecords();
     }
 
@@ -320,12 +310,16 @@ public sealed class MainForm : Form
             { locateFile.Text = "定位文件"; locateFile.Enabled = captures.SelectedRecord is { } selected && MessageContent.Read(selected).File != null; }
         }
     }
-    private async void Export(object? sender, EventArgs e)
+    private async void Export(object? sender, EventArgs e) => await ChooseExport(false);
+    private async void ExportAll(object? sender, EventArgs e) => await ChooseExport(true);
+    private async Task ChooseExport(bool all)
     {
         if (exporting || preparingExport || closing) return;
         string? targetId = captures.SelectedConversationId;
-        if (targetId == null) { MessageBox.Show(this, "请先切换到需要导出的群或联系人标签。", "选择当前会话"); return; }
-        string conversationName = ConversationName(targetId);
+        if (!all && targetId == null) { MessageBox.Show(this, "请先切换到需要导出的群或联系人标签。", "选择当前会话"); return; }
+        var conversations = all ? ExportConversations() : [(Id: targetId!, Name: ConversationName(targetId!))];
+        if (conversations.Length == 0) return;
+        string conversationName = all ? "全部会话" : conversations[0].Name;
         preparingExport = true; UpdateExportButton();
         try
         {
@@ -333,7 +327,7 @@ public sealed class MainForm : Form
             bool transcribe = transcribeVoices.Checked;
             if (transcribe && !SpeechModel.Exists(root))
             {
-                bool hasVoice = await Task.Run(() => { using var reader = new Store(root, readOnly: true); return reader.HasVoiceRecords(targetId); });
+                bool hasVoice = await Task.Run(() => { using var reader = new Store(root, readOnly: true); return conversations.Any(c => reader.HasVoiceRecords(c.Id)); });
                 if (IsDisposed || closing) return;
                 if (hasVoice)
                 {
@@ -342,26 +336,61 @@ public sealed class MainForm : Form
                 }
             }
             var transcription = transcribe ? SpeechSettings.Load(root).Options(root) : null;
-            using var dialog = new FolderBrowserDialog { Description = "选择导出位置，将在其中新建以聊天窗口名称命名的文件夹；同名时自动编号", UseDescriptionForTitle = true };
+            using var dialog = new FolderBrowserDialog { Description = all ? $"选择导出位置，将新建“全部会话”目录，分别导出 {conversations.Length} 个有记录的会话；同名时自动编号" : "选择导出位置，将在其中新建以聊天窗口名称命名的文件夹；同名时自动编号", UseDescriptionForTitle = true };
             if (dialog.ShowDialog(this) != DialogResult.OK) return;
             string folder = ExportDirectory.Create(dialog.SelectedPath, conversationName);
-            await StartExportAsync(targetId, folder, transcription);
+            if (all) await StartAllExportAsync(conversations, folder, transcription);
+            else await StartExportAsync(targetId!, folder, transcription);
         }
         catch (Exception ex) { if (!IsDisposed && !closing) MessageBox.Show(this, ex.Message, "无法开始导出"); }
         finally { preparingExport = false; if (!IsDisposed) UpdateExportButton(); }
     }
 
-    private void UpdateExportButton() => exportCurrent.Enabled = captures.SelectedConversationId != null && captures.TotalCount > 0 && !exporting && !preparingExport && !closing;
+    private void UpdateExportButton()
+    {
+        bool available = !exporting && !preparingExport && !closing;
+        exportCurrent.Enabled = available && captures.SelectedConversationId != null && captures.TotalCount > 0;
+        exportAll.Enabled = available && captures.HasExportableConversations;
+    }
+
+    private (string Id, string Name)[] ExportConversations()
+    {
+        var visible = captures.ConversationIds.ToHashSet(StringComparer.Ordinal);
+        var names = store.Targets().ToDictionary(t => t.Id, t => t.Name, StringComparer.Ordinal);
+        return store.CaptureConversations().Where(c => visible.Contains(c.Id)).Select(c => (c.Id, names.GetValueOrDefault(c.Id, c.Name))).ToArray();
+    }
 
     private string ConversationName(string targetId) => store.Targets().FirstOrDefault(t => t.Id == targetId)?.Name
         ?? store.CaptureConversations().FirstOrDefault(c => c.Id == targetId).Name ?? "聊天记录";
 
     internal Task<bool> StartExportAsync(string targetId, string folder, VoiceTranscriptionOptions? transcription = null,
         Action<IProgress<ExportProgress>>? export = null)
+        => RunExportAsync(ConversationName(targetId), folder, progress =>
+        {
+            if (export != null) export(progress);
+            else
+            {
+                using var reader = new Store(store.Root, readOnly: true);
+                Exporter.Export(reader, folder, targetId, progress, transcription);
+            }
+            return null;
+        });
+
+    internal Task<bool> StartAllExportAsync(string folder, VoiceTranscriptionOptions? transcription = null,
+        Action<Store, string, string, IProgress<ExportProgress>>? export = null)
+        => exporting || closing ? Task.FromResult(false) : StartAllExportAsync(ExportConversations(), folder, transcription, export);
+
+    private Task<bool> StartAllExportAsync((string Id, string Name)[] conversations, string folder, VoiceTranscriptionOptions? transcription,
+        Action<Store, string, string, IProgress<ExportProgress>>? export = null)
+        => conversations.Length == 0 ? Task.FromResult(false) : RunExportAsync("全部会话", folder, progress =>
+        {
+            using var reader = new Store(store.Root, readOnly: true);
+            return BatchExporter.Export(reader, conversations, folder, progress, transcription, export);
+        });
+
+    private Task<bool> RunExportAsync(string name, string folder, Func<IProgress<ExportProgress>, BatchExportResult?> export)
     {
         if (exporting || closing) return Task.FromResult(false);
-        string root = store.Root;
-        string name = ConversationName(targetId);
         exporting = true;
         UpdateExportButton(); exportProgressRow.Height = 78;
         exportProgress.Begin(name, folder);
@@ -371,26 +400,18 @@ public sealed class MainForm : Form
         async Task<bool> Run()
         {
             Exception? failure = null;
+            BatchExportResult? batch = null;
             try
             {
-                await Task.Run(() =>
-                {
-                    if (export != null) export(progress);
-                    else
-                    {
-                        // This connection belongs only to the export worker. UI reads and recording keep their own connection.
-                        using var reader = new Store(root, readOnly: true);
-                        Exporter.Export(reader, folder, targetId, progress, transcription);
-                    }
-                });
+                batch = await Task.Run(() => export(progress));
             }
             catch (Exception ex) { failure = ex; }
             finally
             {
                 exporting = false;
-                if (!IsDisposed) { exportProgress.Complete(failure); UpdateExportButton(); }
+                if (!IsDisposed) { exportProgress.Complete(failure, batch); UpdateExportButton(); }
             }
-            return failure == null;
+            return failure == null && (batch == null || batch.Failed == 0);
         }
     }
     private static void OpenFolder(string folder) => Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
@@ -399,13 +420,6 @@ public sealed class MainForm : Form
         if (allowClose) return;
         e.Cancel = true; if (closing) return;
         closing = true; Enabled = false;
-        await focus.StopAsync();
-        if (focus.PendingCount > 0)
-        {
-            closing = false; Enabled = true;
-            MessageBox.Show(this, $"还有 {focus.PendingCount} 个微信群未恢复，已取消退出。\n请打开“设置 → 会话隐藏（实验）”，查看状态，清空微信搜索框后点击“停止并恢复”。\n也可在微信中手动搜索打开对应群后重试。", "请先恢复会话", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
         if (exporting) footer.Text = "正在等待后台导出完成，随后退出…";
         await PauseAndDrain();
         if (activeExport != null) await activeExport;

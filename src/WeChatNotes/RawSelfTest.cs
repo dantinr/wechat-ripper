@@ -166,6 +166,7 @@ internal static class RawSelfTest
             ConversationSelectionSelfTest.Run(root, report, Check);
             AccountProfileSelfTest.Run(root, report, Check);
             ExportProgressSelfTest.Run(root, report, Check);
+            BatchExportSelfTest.Run(root, report, Check);
             ExportDirectorySelfTest.Run(root, Check);
             AttachmentSelfTest.Run(root, Check);
             HtmlExportSelfTest.Run(root, report, Check);
@@ -174,8 +175,6 @@ internal static class RawSelfTest
             TranscriptionSelfTest.Run(root, Check);
             SpeechBackendSelfTest.Run(root, Check);
             MenuSettingsSelfTest.Run(root, report, Check);
-            FocusSelfTest.Run(root, report, Check);
-            WindowMessageSelfTest.Run(Check);
             if (Environment.GetEnvironmentVariable("RIPPER_TEST_SPEECH_MODEL") is { Length: > 0 } speechModel &&
                 Environment.GetEnvironmentVariable("RIPPER_TEST_SPEECH_WAV") is { Length: > 0 } speechWave)
             {

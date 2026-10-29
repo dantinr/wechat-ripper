@@ -12,7 +12,7 @@ internal static class MenuSettingsSelfTest
         {
             var settings = (ToolStripMenuItem)menu.Items[0]; var about = (ToolStripMenuItem)menu.Items[1];
             settings.DropDownItems[0].PerformClick(); about.PerformClick();
-            check("顶部设置菜单可进入模型设置", settings.Text == "设置" && settings.DropDownItems[0].Text == "模型设置" && modelClicks == 1);
+            check("顶部设置菜单仅提供模型设置且可进入", settings.Text == "设置" && settings.DropDownItems.Count == 1 && settings.DropDownItems[0].Text == "模型设置" && modelClicks == 1);
             dialog.Show(); Application.DoEvents();
             var controls = Descendants(dialog).ToArray(); var github = controls.OfType<LinkLabel>().Single();
             check("点击关于统一展示版本GitHub及完整Slogan", about.Text == "关于" && about.DropDownItems.Count == 0 && aboutClicks == 1 &&

@@ -39,6 +39,7 @@ internal sealed class ConversationRecords : UserControl
     internal int VisibleCount => CurrentGrid?.Rows.Count ?? 0;
     internal DataGridView? CurrentGrid => tabs.SelectedTab?.Controls.OfType<DataGridView>().Single();
     internal string[] ConversationIds => pages.Keys.ToArray();
+    internal bool HasExportableConversations { get; private set; }
 
     internal ConversationRecords(Store store)
     {
@@ -109,7 +110,9 @@ internal sealed class ConversationRecords : UserControl
         string selected = SelectedConversationId ?? "";
         var bound = store.Targets().ToDictionary(t => t.Id, t => t.Name, StringComparer.Ordinal);
         var conversations = bound.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
-        foreach (var (id, name) in store.CaptureConversations()) conversations.TryAdd(id, name + "（已移除）");
+        var recorded = store.CaptureConversations();
+        HasExportableConversations = recorded.Count > 0;
+        foreach (var (id, name) in recorded) conversations.TryAdd(id, name + "（已移除）");
         updating = true; tabs.SuspendLayout();
         try
         {

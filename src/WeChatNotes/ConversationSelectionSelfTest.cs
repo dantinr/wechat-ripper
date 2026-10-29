@@ -104,9 +104,5 @@ internal static class ConversationSelectionSelfTest
         Click(save);
         check("提交包含当前筛选外的全部已选会话且不重复", dialog.DialogResult == DialogResult.OK && dialog.Results.Select(t => t.ConversationId).SequenceEqual(["c@chatroom", "friend-d"]) && dialog.Results.All(t => t.SourceRoot == account.Text));
 
-        using var focus = new RawBindDialog(recorder, true);
-        focus.SetSessions(loaded);
-        var focusList = Descendants(focus).OfType<RangeCheckedListBox>().Single();
-        check("隐藏会话选择仍只列出微信群", focusList.Items.Count == 3 && focusList.Items.Cast<ChatSession>().All(s => s.Username.EndsWith("@chatroom")));
     }
 }

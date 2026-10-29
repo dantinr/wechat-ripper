@@ -18,10 +18,6 @@ public sealed class LocalOcr
     }
 
     public async Task<string> ReadAsync(Bitmap source)
-        => string.Join('\n', (await ReadLinesAsync(source)).Select(line => line.Text));
-
-    internal sealed record Line(string Text, Rectangle Bounds);
-    internal async Task<Line[]> ReadLinesAsync(Bitmap source)
     {
         double scale = Math.Min(source.Width < 1500 ? 2.0 : 1.0, (double)OcrEngine.MaxImageDimension / Math.Max(source.Width, source.Height));
         using var resized = new Bitmap(Math.Max(1, (int)(source.Width * scale)), Math.Max(1, (int)(source.Height * scale)), System.Drawing.Imaging.PixelFormat.Format32bppArgb);
@@ -37,12 +33,7 @@ public sealed class LocalOcr
         finally { resized.UnlockBits(data); }
         using var software = SoftwareBitmap.CreateCopyFromBuffer(bytes.AsBuffer(), BitmapPixelFormat.Bgra8, resized.Width, resized.Height, BitmapAlphaMode.Ignore);
         var result = await engine.RecognizeAsync(software);
-        return result.Lines.Select(line =>
-        {
-            double left = line.Words.Min(w => w.BoundingRect.Left), top = line.Words.Min(w => w.BoundingRect.Top);
-            double right = line.Words.Max(w => w.BoundingRect.Right), bottom = line.Words.Max(w => w.BoundingRect.Bottom);
-            return new Line(JoinWords(line.Words.Select(w => w.Text)), Rectangle.FromLTRB((int)(left / scale), (int)(top / scale), (int)Math.Ceiling(right / scale), (int)Math.Ceiling(bottom / scale)));
-        }).ToArray();
+        return string.Join('\n', result.Lines.Select(line => JoinWords(line.Words.Select(w => w.Text))));
     }
 
     private static string JoinWords(IEnumerable<string> words)

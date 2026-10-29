@@ -95,10 +95,7 @@ internal sealed class RawChatSource(string root) : IDisposable
                 string table = "Msg_" + Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(target.ConversationId!))).ToLowerInvariant();
                 if (!tables.Contains(table)) continue;
                 using var command = db.CreateCommand();
-                command.CommandText = $"PRAGMA table_info(\"{table}\")";
-                bool hasSource = false;
-                using (var columns = command.ExecuteReader()) while (columns.Read()) hasSource |= columns.GetString(1) == "source";
-                command.CommandText = $"SELECT local_id,server_id,local_type,real_sender_id,create_time,message_content,compress_content,{(hasSource ? "source" : "NULL")} FROM \"{table}\" WHERE create_time >= $from ORDER BY create_time,local_id";
+                command.CommandText = $"SELECT local_id,server_id,local_type,real_sender_id,create_time,message_content,compress_content FROM \"{table}\" WHERE create_time >= $from ORDER BY create_time,local_id";
                 command.Parameters.AddWithValue("$from", target.FromUnix);
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
@@ -119,7 +116,7 @@ internal sealed class RawChatSource(string root) : IDisposable
                     string id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{target.Id}|{Path.GetFileName(path)}|{local}"))).ToLowerInvariant();
                     string kind = TypeName(type);
                     var message = new RawMessageInfo(Path.GetFileName(path), local, server, sender, sender.Length > 0 ? NameOf(sender) : "未知发送人 / 系统", time, type, raw,
-                        groupNicknames.GetValueOrDefault((target.ConversationId!, sender)), hasSource ? MentionMetadata.Decode(reader.GetValue(7)) : null);
+                        groupNicknames.GetValueOrDefault((target.ConversationId!, sender)));
                     string text = content.Length > 0 ? content : $"[{kind}，无文字正文]";
                     result.Add(new(id, target.Id, target.Name, DateTimeOffset.Now.ToOffset(TimeSpan.FromHours(8)), text, text, "",
                         $"直接读取本地消息 · {kind}。导出时一并保存可匹配的本地文件附件和语音；图片和视频不提取原文件。", message));
@@ -127,26 +124,6 @@ internal sealed class RawChatSource(string root) : IDisposable
             }
         }
         return result.OrderBy(r => r.Message!.SentAt).ThenBy(r => r.Message!.SourceDatabase).ThenBy(r => r.Message!.LocalId).ToList();
-    }
-    internal string? OwnUsername()
-    {
-        string folder = Directory.GetParent(Path.TrimEndingDirectorySeparator(Root))!.Name;
-        var suffix = Regex.Match(folder, @"^(.+)_([a-zA-Z0-9]{4,8})$", RegexOptions.CultureInvariant);
-        var candidates = new[] { folder, suffix.Success ? suffix.Groups[1].Value : folder }.Distinct(StringComparer.Ordinal).Where(names.ContainsKey).ToArray();
-        return candidates.Length == 1 ? candidates[0] : null;
-    }
-    internal bool UniqueGroupName(string conversation, string name) => conversation.EndsWith("@chatroom", StringComparison.Ordinal) &&
-        names.TryGetValue(conversation, out var actual) && actual == name && names.Count(p => WeChatListAutomation.SameName(p.Value, name)) == 1;
-    internal FocusSnapshot FocusState(string conversation, CancellationToken token)
-    {
-        using var db = Open(Path.Combine(Root, "session", "session.db"), token);
-        using var command = db.CreateCommand();
-        command.CommandText = "SELECT is_hidden,last_timestamp,last_msg_locald_id,last_msg_sender FROM SessionTable WHERE username=$id";
-        command.Parameters.AddWithValue("$id", conversation);
-        using var row = command.ExecuteReader();
-        if (!row.Read()) throw new InvalidDataException("会话已不在当前账号的会话列表中。");
-        return new(Convert.ToInt64(row.GetValue(0)) != 0, string.Join('|', Enumerable.Range(1, 3).Select(i => row.GetValue(i).ToString())),
-            row.GetInt64(1), row.GetInt64(2), row.IsDBNull(3) ? "" : row.GetString(3));
     }
     internal static string DecodeContent(object content, object compressed)
     {

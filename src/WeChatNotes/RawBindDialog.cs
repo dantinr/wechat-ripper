@@ -20,16 +20,15 @@ internal sealed class RawBindDialog : Form
     private readonly CancellationTokenSource cancellation = new();
     private bool busy;
     private bool populating;
-    private readonly bool focusMode;
     internal List<Target> Results { get; } = [];
-    internal RawBindDialog(RawRecorder recorder, bool focusMode = false)
+    internal RawBindDialog(RawRecorder recorder)
     {
-        this.recorder = recorder; this.focusMode = focusMode;
-        Text = focusMode ? "选择需要隐藏的微信群" : "选择需要记录的群或联系人"; Size = new(820, 660); MinimumSize = new(680, 520);
+        this.recorder = recorder;
+        Text = "选择需要记录的群或联系人"; Size = new(820, 660); MinimumSize = new(680, 520);
         Font = new("Microsoft YaHei UI", 10); StartPosition = FormStartPosition.CenterParent;
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new(22), ColumnCount = 1, RowCount = 8 };
         foreach (var style in new RowStyle[] { new(SizeType.Absolute, 40), new(SizeType.Absolute, 42), new(SizeType.Absolute, 42), new(SizeType.Absolute, 40), new(SizeType.Percent, 100), new(SizeType.Absolute, 48), new(SizeType.Absolute, 42), new(SizeType.Absolute, 48) }) layout.RowStyles.Add(style);
-        layout.Controls.Add(new Label { Text = focusMode ? "只添加隐藏规则，不添加聊天采集绑定。请选择名称完整、无同名的微信群。" : "选择会话后自动记录原始消息文字，微信窗口可最小化。", AutoSize = true }, 0, 0);
+        layout.Controls.Add(new Label { Text = "选择会话后自动记录原始消息文字，微信窗口可最小化。", AutoSize = true }, 0, 0);
         var source = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3 };
         source.ColumnStyles.Add(new(SizeType.Percent, 100)); source.ColumnStyles.Add(new(SizeType.Absolute, 100)); source.ColumnStyles.Add(new(SizeType.Absolute, 100));
         source.Controls.Add(accounts, 0, 0);
@@ -45,7 +44,6 @@ internal sealed class RawBindDialog : Form
             new ImportRange("最近 7 天", 7), new ImportRange("最近 24 小时", 1), new ImportRange("从添加时开始", null)]);
         history.SelectedIndex = 0; options.Controls.Add(history);
         layout.Controls.Add(options, 0, 5); layout.Controls.Add(status, 0, 6);
-        if (focusMode) { options.Visible = false; layout.RowStyles[5].Height = 0; save.Text = "选择这些微信群"; }
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         buttons.Controls.Add(save); buttons.Controls.Add(connect); layout.Controls.Add(buttons, 0, 7); Controls.Add(layout);
         accounts.TextChanged += (_, _) => { all.Clear(); selected.Clear(); Populate(); };
@@ -81,9 +79,9 @@ internal sealed class RawBindDialog : Form
     }
     internal void SetSessions(IEnumerable<ChatSession> loaded)
     {
-        all = loaded.Where(s => !focusMode || s.Username.EndsWith("@chatroom", StringComparison.Ordinal)).ToList();
+        all = loaded.ToList();
         selected.Clear(); Populate();
-        status.Text = focusMode ? $"已读取 {all.Count} 个群，请勾选需要隐藏的群。" : $"已读取 {all.Count} 个会话，请勾选需要记录的群或联系人。";
+        status.Text = $"已读取 {all.Count} 个会话，请勾选需要记录的群或联系人。";
     }
     private async Task Detect()
     {

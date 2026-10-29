@@ -1,6 +1,6 @@
 namespace WeChatNotes;
 
-public sealed record ExportProgress(string Stage, int Completed = 0, int Total = 0, string? Detail = null)
+public sealed record ExportProgress(string Stage, int Completed = 0, int Total = 0, string? Detail = null, string? Conversation = null)
 {
     public int? Percent => Total > 0 ? (int)Math.Clamp((long)Completed * 100 / Total, 0, 100) : null;
 }
