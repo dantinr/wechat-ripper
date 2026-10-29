@@ -72,10 +72,10 @@ internal static class BatchExportSelfTest
                 }
                 release.Set(); bool succeeded = await job;
                 string first = Path.Combine(folder, "产品_讨论"), second = Path.Combine(folder, "产品_讨论 (2)");
-                CaptureRecord[] Read(string path) => File.ReadAllLines(Path.Combine(path, "聊天记录.jsonl")).Select(line => JsonSerializer.Deserialize<CaptureRecord>(line)!).ToArray();
-                check("全部导出不受搜索分页影响且同名会话独立保存", succeeded && Read(first).Length == 105 && Read(first).All(c => c.TargetId == "a") && Read(second).Single().TargetId == "b" && Directory.GetDirectories(folder).Length == 3);
+                string[] Read(string path) => ExportTestDocument.Records(path);
+                check("全部导出不受搜索分页影响且同名会话独立保存", succeeded && Read(first).Length == 105 && Read(first).All(c => !c.Contains("b-1正文")) && Read(second).Single().Contains("b-1正文") && Directory.GetDirectories(folder).Length == 3);
                 check("导出范围保留开始时会话列表并排除空会话和此前关闭会话", File.Exists(Path.Combine(folder, "历史会话", "聊天记录.html")) && !Directory.Exists(Path.Combine(folder, "新添加会话")) && !Directory.Exists(Path.Combine(folder, "空会话")) && !Directory.Exists(Path.Combine(folder, "已关闭会话")));
-                check("批量完成汇总成功数并恢复按钮及目录入口", stage.Text.Contains("成功 3 个会话，失败 0") && all.Enabled && open.Enabled && File.ReadAllText(Path.Combine(folder, "导出结果.txt")).Contains("成功 3 个会话，失败 0"));
+                check("批量完成汇总成功数并恢复按钮及目录入口", stage.Text.Contains("成功 3 个会话，失败 0") && all.Enabled && open.Enabled && File.ReadAllText(Path.Combine(folder, "聊天记录.html")).Contains("成功 3 个会话，失败 0"));
 
                 string partialFolder = Path.Combine(root, "batch-partial-output");
                 bool partial = await form.StartAllExportAsync(partialFolder, export: (reader, destination, id, progress) =>
@@ -84,7 +84,7 @@ internal static class BatchExportSelfTest
                     Exporter.Export(reader, destination, id, progress);
                 });
                 check("单个会话失败继续其余导出并准确提示部分完成", !partial && File.Exists(Path.Combine(partialFolder, "新添加会话", "聊天记录.html")) && File.Exists(Path.Combine(partialFolder, "历史会话", "聊天记录.html")) && stage.Text.Contains("成功 2 个会话，失败 1") && all.Enabled && open.Enabled);
-                check("导出结果清单记录失败会话原因及成功目录", File.ReadAllText(Path.Combine(partialFolder, "导出结果.txt")).Contains("合成单会话失败") && File.ReadAllText(Path.Combine(partialFolder, "导出结果.txt")).Contains("目录：历史会话"));
+                check("导出结果清单记录失败会话原因及成功目录", File.ReadAllText(Path.Combine(partialFolder, "聊天记录.html")).Contains("合成单会话失败") && File.ReadAllText(Path.Combine(partialFolder, "聊天记录.html")).Contains("目录：历史会话"));
                 string blocked = Path.Combine(root, "batch-blocked"); File.WriteAllText(blocked, "合成同名文件");
                 bool failed = await form.StartAllExportAsync(blocked);
                 check("批量目录无法创建时恢复操作并显示失败", !failed && all.Enabled && stage.Text.Contains("导出失败"));

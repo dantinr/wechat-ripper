@@ -62,17 +62,17 @@ internal static class SilkSelfTest
         Dictionary<string, VoicePayload> Read(string account, IReadOnlyList<CaptureRecord> records) => records.ToDictionary(r => r.Id,
             r => new VoicePayload(r.Id == broken.Id ? [.. invalid] : [.. original], "已读取"));
         string folder = Path.Combine(root, "WAV 导出 #测试"); Exporter.Export(store, folder, target, Read);
-        string dialogue = File.ReadAllText(Path.Combine(folder, "对话内容.md")), markdown = File.ReadAllText(Path.Combine(folder, "聊天记录.md"));
+        string dialogue = File.ReadAllText(Path.Combine(folder, "对话内容.md")), html = ExportTestDocument.Html(folder);
         string[] Links(string document) => Regex.Matches(document, @"\]\(([^)]+)\)").Select(m => Uri.UnescapeDataString(m.Groups[1].Value)).ToArray();
         string[] links = Links(dialogue), waveLinks = links.Where(p => Path.GetExtension(p) == ".wav").ToArray(), silkLinks = links.Where(p => Path.GetExtension(p) == ".silk").ToArray();
         byte[] ReadExport(string path) => File.ReadAllBytes(Path.Combine(folder, path.Replace('/', Path.DirectorySeparatorChar)));
         check("聊天导出自动提供可播放 WAV 和原始 SILK 的有效相对链接",
-            waveLinks.Length == 2 && silkLinks.Length == 3 && links.All(p => File.Exists(Path.Combine(folder, p))) && Links(markdown).Length == 5 && waveLinks.All(p => ReadExport(p).SequenceEqual(expected)));
+            waveLinks.Length == 2 && silkLinks.Length == 3 && links.All(p => File.Exists(Path.Combine(folder, p))) && waveLinks.All(p => ReadExport(p).SequenceEqual(expected)));
         check("WAV 转换保留原始 SILK 字节且中文空格目录正常工作", silkLinks.Count(p => ReadExport(p).SequenceEqual(original)) == 2 && silkLinks.Any(p => ReadExport(p).SequenceEqual(invalid)));
         check("同秒语音的 WAV 分目录保存互不覆盖", waveLinks.Distinct().Count() == 2 && Path.GetFileName(waveLinks[0]) == Path.GetFileName(waveLinks[1]));
         check("转换失败保留原音频并在对话中说明且文字仍完整", dialogue.Contains("WAV 转换失败，已保留原始 SILK") && dialogue.Contains(text.Text) && Directory.GetFiles(folder, "*.wav", SearchOption.AllDirectories).Length == 2);
-        string csv = File.ReadAllText(Path.Combine(folder, "聊天记录.csv"));
-        check("CSV 同时提供 WAV 路径原始 SILK 路径和转换状态", csv.Contains("原始语音文件") && csv.Contains(waveLinks[0]) && csv.Contains(silkLinks[0]) && csv.Contains("已转换为 WAV"));
+        string[] htmlRecords = ExportTestDocument.Records(folder);
+        check("HTML 提供可播放 WAV 并保留转换失败状态", waveLinks.All(p => html.Contains(string.Join('/', p.Split('/').Select(Uri.EscapeDataString)))) && htmlRecords.Any(r => r.Contains("WAV 转换失败")));
 
         string collisionFolder = Path.Combine(root, "wav-collision");
         string key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(target + "|" + first.Id))).ToLowerInvariant();

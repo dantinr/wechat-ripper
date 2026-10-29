@@ -51,7 +51,6 @@ internal sealed class SelfTestForm : Form
             Check("重复真实消息不会全局去重", TextDiff.Added("甲\n收到", "甲\n收到\n收到").Text == "收到");
             var gap = TextDiff.Added("甲\n乙", "丙\n丁");
             Check("无法对齐时保留整屏并标记", gap.Text == "丙\n丁" && gap.Note.Contains("无法对齐"));
-            Check("CSV 聊天公式作为文本处理", Exporter.Csv("  =HYPERLINK(\"https://example.invalid\")").StartsWith("\"'"));
             string id = Guid.NewGuid().ToString("N");
             var record = new CaptureRecord(id, "test-target", "测试需求群", DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8)), text, text, Path.Combine("screenshots", id + ".png"), "合成测试数据");
             using (var store = new Store(root))
@@ -63,10 +62,10 @@ internal sealed class SelfTestForm : Form
             {
                 Check("重启后记录和会话可恢复", reopened.Captures().Count == 1 && reopened.Targets().Count == 1);
                 string export = Path.Combine(root, "export"); Exporter.Export(reopened, export);
-                var exported = JsonSerializer.Deserialize<CaptureRecord>(File.ReadAllText(Path.Combine(export, "聊天记录.jsonl")))!;
-                Check("导出 JSONL 与截图可移植", exported.Text == text && File.Exists(Path.Combine(export, exported.ImagePath)));
+                string exported = ExportTestDocument.Records(export).Single();
+                Check("旧版 OCR 文字可以导出为 HTML", exported.Contains(System.Net.WebUtility.HtmlEncode(text)) || System.Net.WebUtility.HtmlDecode(exported).Contains(text));
                 Check("导出原文保留来源锚点且不生成需求文档", !File.Exists(Path.Combine(export, "需求整理.md"))
-                    && File.ReadAllText(Path.Combine(export, "聊天记录.md")).Contains("id=\"record-" + id + "\""));
+                    && exported.Contains("<dd>" + id + "</dd>"));
                 using (var recorder = new Recorder(reopened, () => [new(Handle, Text)]))
                 {
                     string status = "";

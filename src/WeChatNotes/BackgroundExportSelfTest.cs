@@ -106,7 +106,7 @@ internal static class BackgroundExportSelfTest
                 }
                 release.Set();
                 bool succeeded = await job;
-                check("完成后保持当前会话和采集状态并提供目录入口且只导出开始时读取的消息", succeeded && File.ReadAllLines(Path.Combine(folder, "聊天记录.jsonl")).Length == 2 && File.Exists(Path.Combine(folder, "聊天记录.html")) && records.SelectedConversationId == "b" && start.Text == "暂停记录" && exportButton.Enabled && open.Enabled && stage.Text.Contains("导出完成") && form.OwnedForms.Length == 0);
+                check("完成后保持当前会话和采集状态并提供目录入口且只导出开始时读取的消息", succeeded && ExportTestDocument.Records(folder).Length == 2 && File.Exists(Path.Combine(folder, "聊天记录.html")) && records.SelectedConversationId == "b" && start.Text == "暂停记录" && exportButton.Enabled && open.Enabled && stage.Text.Contains("导出完成") && form.OwnedForms.Length == 0);
                 string blocked = Path.Combine(root, "background-export-failed"); File.WriteAllText(blocked, "合成文件占用导出目录");
                 bool failed = await form.StartExportAsync("b", blocked);
                 check("后台导出失败在主界面提示并恢复按钮且不弹出阻塞窗口", !failed && form.Enabled && exportButton.Enabled && stage.Text.Contains("导出失败") && bar is { Style: ProgressBarStyle.Continuous, Value: 0 } && form.OwnedForms.Length == 0);

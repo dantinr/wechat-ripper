@@ -73,7 +73,7 @@ internal sealed class ExportProgressView : UserControl
         {
             stage.Text = $"「{conversation}」导出结束 · {batch.Summary}";
             stage.ForeColor = batch.Failed == 0 ? Color.FromArgb(24, 100, 65) : Color.Firebrick;
-            counts.Text = "打开目录查看“导出结果.txt”";
+            counts.Text = "打开目录查看“聊天记录.html”";
         }
     }
 

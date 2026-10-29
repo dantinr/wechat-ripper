@@ -20,13 +20,13 @@ internal static class ExportProgressSelfTest
         var progress = new Observer(p =>
         {
             updates.Add(p);
-            if (p.Stage == "导出完成") filesReadyAtCompletion = File.ReadAllLines(Path.Combine(folder, "聊天记录.jsonl")).Length == 503 && File.ReadAllText(Path.Combine(folder, "使用说明.txt")).Length > 0;
+            if (p.Stage == "导出完成") filesReadyAtCompletion = ExportTestDocument.Records(folder).Length == 503 && File.ReadAllText(Path.Combine(folder, "对话内容.md")).Length > 0;
         });
         Exporter.Export(store, folder, "progress", (_, selected) => selected.ToDictionary(c => c.Id, _ => new VoicePayload([1, 2, 3], "合成音频")), progress);
-        check("导出按真实步骤报告附件语音和文档进度", new[] { "整理消息内容", "导出文件附件", "读取本地语音库", "导出语音", "写入聊天记录", "生成对话文档", "生成 HTML 聊天目录" }.All(stage => updates.Any(p => p.Stage == stage)));
+        check("导出按真实步骤报告附件语音和文档进度", new[] { "整理消息内容", "导出文件附件", "读取本地语音库", "导出语音", "生成对话文档", "生成 HTML 聊天目录" }.All(stage => updates.Any(p => p.Stage == stage)));
         check("进度数量有效且完成通知发生在文件写出之后", filesReadyAtCompletion && updates.Last() is { Stage: "导出完成", Percent: 100 } && updates.All(p => p.Completed >= 0 && (p.Total == 0 || p.Completed <= p.Total)) && updates.Where(p => p.Total > 0).GroupBy(p => p.Stage).All(g => g.Last().Percent == 100) && updates.All(p => !p.Stage.Contains("合成正文")));
 
-        string failed = Path.Combine(root, "export-progress-failed"); Directory.CreateDirectory(Path.Combine(failed, "使用说明.txt"));
+        string failed = Path.Combine(root, "export-progress-failed"); Directory.CreateDirectory(Path.Combine(failed, "聊天记录.html"));
         var failedUpdates = new List<ExportProgress>(); bool rejected = false;
         try { Exporter.Export(store, failed, "progress", (_, selected) => selected.ToDictionary(c => c.Id, _ => new VoicePayload(null, "未加载")), new Observer(failedUpdates.Add)); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { rejected = true; }

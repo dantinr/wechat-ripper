@@ -147,10 +147,10 @@ internal static class RawSelfTest
                 Check("同文不同消息均保留", store.AddMessages([record with { Id = "raw-test-2", Message = info with { LocalId = 2 } }]) == 1 && store.Captures().Count == 2);
                 Check("发送完成后更新同条消息编号", store.AddMessages([record with { Message = info with { ServerId = 500 } }]) == 1 && store.Captures().Count == 2 && store.Captures()[0].Message!.ServerId == 500);
                 string export = Path.Combine(root, "export"); Exporter.Export(store, export);
-                var records = File.ReadAllLines(Path.Combine(export, "聊天记录.jsonl")).Select(line => JsonSerializer.Deserialize<CaptureRecord>(line)!).ToList();
-                Check("JSONL 保留原文和来源元数据", records[0].Text == original && records[0].Message!.RawContent == original && records[0].Message!.ServerId == 500);
-                Check("Markdown 保留消息来源锚点", File.ReadAllText(Path.Combine(export, "聊天记录.md")).Contains("id=\"record-raw-test-1\""));
-                Check("CSV 公式按文本导出", Exporter.Csv(" =1+1").StartsWith("\"'"));
+                var records = ExportTestDocument.Records(export);
+                Check("HTML 保留原文和来源元数据", records[0].Contains(original) && records[0].Contains("<dt>消息编号</dt><dd>500</dd>") && records[0].Contains("message_0.db"));
+                Check("HTML 保留消息来源锚点", records[0].Contains("<dd>raw-test-1</dd>") && records[0].Contains("原文与来源"));
+                Check("只导出 HTML 和对话 Markdown", Directory.GetFiles(export).Select(Path.GetFileName).ToHashSet().SetEquals(["聊天记录.html", "对话内容.md"]));
             }
             using (var reopened = new Store(Path.Combine(root, "store")))
             {

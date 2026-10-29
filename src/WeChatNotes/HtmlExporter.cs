@@ -12,10 +12,11 @@ internal static class HtmlExporter
         IReadOnlyDictionary<string, ExportedVoice> voices, IReadOnlyDictionary<string, VoiceTranscript> transcripts,
         IReadOnlyDictionary<string, string> sourceRoots, IProgress<ExportProgress> progress)
     {
-        var index = ExportFileLocator.WriteIndex(folder, attachments.Values.Select(a => a.RelativePath)
+        var index = ExportFileLocator.CreateIndex( attachments.Values.Select(a => a.RelativePath)
             .Concat(voices.Values.SelectMany(v => new[] { v.RelativePath, v.OriginalPath })));
         using var html = new StreamWriter(Path.Combine(folder, "聊天记录.html"), false, new UTF8Encoding(false));
         html.WriteLine(Head);
+        ExportFileLocator.WriteEmbeddedIndex(html, index);
         string title = captures.Select(c => c.TargetName).Distinct(StringComparer.Ordinal).Take(2).ToArray() is [var name] ? name : "聊天记录";
         var senders = captures.OrderBy(c => c.Message?.SentAt ?? c.ObservedAt).Where(c => c.Message != null).Select(c => (Key: SenderKey(c), Name: c.Message!.DisplaySender)).DistinctBy(s => s.Key).ToArray();
         var avatars = senders.Select((s, i) => (s.Key, Color: i % 6)).ToDictionary(s => s.Key, s => s.Color, StringComparer.Ordinal);
@@ -31,7 +32,7 @@ internal static class HtmlExporter
         html.WriteLine("<div class=archive-facts><p class=section-label>档案信息</p><p>按消息发送时间排列<br>时区 UTC+08:00</p><p>附件和语音保存在此目录，<br>移动时请保留整个文件夹。</p></div><div class=sidebar-footer><strong>Ripper</strong><p>Free your conversations.<br>Own your records.</p><span>本地保存 · 离线阅读</span></div></aside><main class=chat>");
         html.WriteLine($"<header class=chat-header><div><h1>{H(title)}</h1><p>聊天记录 · 共 {captures.Count:N0} 条记录</p></div>");
         html.WriteLine("""
-            <details class=export-menu id=export-files><summary>导出文件 <span aria-hidden=true>⌄</span></summary><nav class=downloads aria-label="导出文件"><a href="对话内容.md" target=_blank rel=noopener>对话 Markdown ↗</a><a href="聊天记录.md" target=_blank rel=noopener>原文 Markdown ↗</a><a href="聊天记录.csv" target=_blank rel=noopener>CSV 表格 ↗</a><a href="聊天记录.jsonl" target=_blank rel=noopener>JSONL 数据 ↗</a><a href="使用说明.txt" target=_blank rel=noopener>使用说明 ↗</a><p>“定位文件”通过 Ripper 打开 Windows 文件夹并选中文件。首次使用请先运行新版 Ripper，浏览器询问时选择打开；也可使用“浏览目录”或展开文件路径查找。请保留 ripper-files.json 文件定位索引。</p></nav></details></header>
+            <details class=export-menu id=export-files><summary>导出文件 <span aria-hidden=true>⌄</span></summary><nav class=downloads aria-label="导出文件"><a href="对话内容.md" target=_blank rel=noopener>对话 Markdown ↗</a><p>“定位文件”通过 Ripper 打开 Windows 文件夹并选中文件。首次使用请先运行新版 Ripper，浏览器询问时选择打开；也可使用“浏览目录”或展开文件路径查找。移动时请完整保留此 HTML、附件和语音目录。</p></nav></details></header>
             <section class=tools aria-label="查找记录"><label class=search><span class=sr-only>搜索记录</span><svg viewBox="0 0 24 24" aria-hidden=true><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id=search type=search placeholder="搜索内容、发送人、文件名…" autocomplete=off></label><label><span class=sr-only>显示</span><select id=kind><option value=all>全部记录</option><option value=file>文件附件</option><option value=voice>语音消息</option></select></label><label class=self-label>本人<select id=self title="自动识别来源账号的本人消息，可手动更改右侧发送人"><option value="">未指定</option>
             """);
         if (ownSenders.Count > 0) html.WriteLine("<option value=\"__auto\" selected>自动识别</option>");

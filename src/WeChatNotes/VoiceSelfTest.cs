@@ -77,17 +77,17 @@ internal static class VoiceSelfTest
         foreach (var payload in found.Values) RawVoiceSource.Clear(payload);
 
         string folder = Path.Combine(root, "voice-export"); Export(folder);
-        string dialogue = File.ReadAllText(Path.Combine(folder, "对话内容.md")), raw = File.ReadAllText(Path.Combine(folder, "聊天记录.md"));
+        string dialogue = File.ReadAllText(Path.Combine(folder, "对话内容.md")), raw = ExportTestDocument.Html(folder);
         var links = Regex.Matches(dialogue, @"\]\(([^)]+)\)").Select(m => Uri.UnescapeDataString(m.Groups[1].Value)).ToArray();
         string[] exported = links.Select(p => Path.Combine(folder, p.Replace('/', Path.DirectorySeparatorChar))).ToArray();
-        check("语音随当前聊天记录导出到语音目录并在两份 Markdown 添加有效相对链接", links.Length == 4 && links.All(p => p.StartsWith("语音/", StringComparison.Ordinal)) && exported.All(File.Exists) && Regex.Matches(raw, @"\]\(([^)]+)\)").Count == 4);
+        check("语音随当前聊天记录导出且 Markdown 链接有效", links.Length == 4 && links.All(p => p.StartsWith("语音/", StringComparison.Ordinal)) && exported.All(File.Exists));
         check("原始 SILK 语音完整保留微信前缀和音频字节", exported.Count(p => Path.GetExtension(p) == ".silk") == 3 && exported.Any(p => File.ReadAllBytes(p).SequenceEqual(audio)));
         check("同时发送的语音分目录保存互不覆盖", links[0] != links[1] && Path.GetFileName(links[0]) == Path.GetFileName(links[1]) && !File.ReadAllBytes(exported[0]).SequenceEqual(File.ReadAllBytes(exported[1])));
         check("未知语音格式以 bin 原样保存", exported.Any(p => Path.GetExtension(p) == ".bin" && File.ReadAllBytes(p).SequenceEqual(new byte[] { 1, 2, 3 })));
         check("未找到空音频和重复音频在对话中明确标注", dialogue.Contains("语音未导出") && dialogue.Contains("本地音频为空") && dialogue.Contains("匹配到多条音频") && !dialogue.Contains("<voicemsg"));
-        string csv = File.ReadAllText(Path.Combine(folder, "聊天记录.csv"));
-        check("CSV 包含语音文件路径和导出状态且 JSONL 保留消息原文", csv.Contains("语音文件,语音导出状态") && csv.Contains(links[0]) && File.ReadAllLines(Path.Combine(folder, "聊天记录.jsonl")).Select(s => JsonSerializer.Deserialize<CaptureRecord>(s)!).Any(c => c.Id == "voice-1" && c.Message!.RawContent == records[0].Message!.RawContent));
-        check("当前聊天语音导出不混入其他会话", !dialogue.Contains("其他语音群") && File.ReadAllLines(Path.Combine(folder, "聊天记录.jsonl")).All(s => !s.Contains("other-voice")) && Directory.GetFiles(Path.Combine(folder, "语音"), "*", SearchOption.AllDirectories).Length == 4);
+        string html = System.Net.WebUtility.HtmlDecode(raw);
+        check("HTML 保留语音状态及消息原文", html.Contains("<voicemsg") && html.Contains("voice-1") && html.Contains("语音未导出"));
+        check("当前聊天语音导出不混入其他会话", !dialogue.Contains("其他语音群") && !html.Contains("other-voice") && Directory.GetFiles(Path.Combine(folder, "语音"), "*", SearchOption.AllDirectories).Length == 4);
         check("语音导出不改变源媒体数据库", before[0] == Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(first))) && before[1] == Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(second))));
 
         byte[] temporary = [.. audio];

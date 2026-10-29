@@ -65,7 +65,7 @@ internal static class PaginationSelfTest
         check("空会话显示零条且不会回退其他会话", view.TotalCount == 0 && view.VisibleCount == 0 && view.PageNumber == 1 && view.SelectedRecord == null);
         view.SelectConversation("a"); view.GoToPage(2); view.Search("历史独有关键词");
         string export = Path.Combine(root, "pagination-export"); Exporter.Export(store, export, "a");
-        check("导出仍包含搜索与分页之外的全部会话消息", File.ReadLines(Path.Combine(export, "聊天记录.jsonl")).Count() == 1304);
+        check("导出仍包含搜索与分页之外的全部会话消息", ExportTestDocument.Records(export).Length == 1304);
 
         view.Search(""); view.GoToPage(2); host.PerformLayout();
         void Screenshot(string suffix)

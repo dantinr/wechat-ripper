@@ -84,16 +84,16 @@ internal static class SpeechBackendSelfTest
             check("发布版实际使用GPU模型及单路工作进程导出合成语音", engine.Description == "GPU（Vulkan）· 单路");
         }
         double gpuSeconds = watch.Elapsed.TotalSeconds;
-        var gpuRecords = File.ReadAllLines(Path.Combine(gpuFolder, "聊天记录.jsonl")).Select(line => JsonSerializer.Deserialize<CaptureRecord>(line)!).ToArray();
-        check("GPU转写随HTML和聊天文档导出且不改原文或顺序", gpuRecords.Length == 4 && gpuRecords.All(r => r.VoiceTranscription?.Text?.Contains("明天下午三点开会") == true && r.VoiceTranscription.Model.Contains("GPU Vulkan") && r.Message!.RawContent == "合成原始语音XML") && gpuRecords.Select(r => r.Id).SequenceEqual(store.Captures().Select(r => r.Id)));
+        var gpuRecords = ExportTestDocument.Records(gpuFolder);
+        check("GPU转写随HTML和聊天文档导出且不改原文或顺序", gpuRecords.Length == 4 && gpuRecords.Select((r, i) => r.Contains("明天下午三点开会") && r.Contains("合成原始语音XML") && r.Contains("<dd>" + store.Captures()[i].Id + "</dd>")).All(ok => ok));
         check("GPU初始化完成后立即显示实际设备并保留零完成条数", progress.Any(p => p.Stage == "离线语音转文字" && p.Completed == 0 && p.Detail == "GPU（Vulkan）· 单路"));
         watch.Restart();
         string cpuFolder = Path.Combine(root, "cpu-device-export");
         using (var engine = new SpeechTranscriber(new(modelPath, Device: SpeechDevice.Cpu)))
             Exporter.Export(store, cpuFolder, "gpu", Read, null, engine.Transcribe, 4, engine);
         double cpuSeconds = watch.Elapsed.TotalSeconds;
-        var cpuRecords = File.ReadAllLines(Path.Combine(cpuFolder, "聊天记录.jsonl")).Select(line => JsonSerializer.Deserialize<CaptureRecord>(line)!).ToArray();
-        check("同一主进程中可从GPU切换CPU并正确识别合成语音", cpuRecords.All(r => r.VoiceTranscription?.Text?.Contains("明天下午三点开会") == true && r.VoiceTranscription.Model.Contains("CPU")));
+        var cpuRecords = ExportTestDocument.Records(cpuFolder);
+        check("同一主进程中可从GPU切换CPU并正确识别合成语音", cpuRecords.Length == 4 && cpuRecords.All(r => r.Contains("明天下午三点开会")));
         File.WriteAllText(Path.ChangeExtension(report, ".speech-benchmark.json"), JsonSerializer.Serialize(new { Voices = 4, GPU = "Vulkan", GPUSeconds = gpuSeconds, CPUParallelism = 4, CPUSeconds = cpuSeconds }, new JsonSerializerOptions { WriteIndented = true }));
         var worker = new GpuSpeechWorker(modelPath);
         using var process = Process.GetProcessById(worker.ProcessId);

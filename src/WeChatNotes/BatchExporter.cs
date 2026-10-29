@@ -20,8 +20,9 @@ internal static class BatchExporter
         using var engine = transcription == null || export != null ? null : new SpeechTranscriber(transcription);
         // Write results as each conversation finishes so completed exports remain
         // identifiable even if a later directory or report write fails.
-        using var report = new StreamWriter(Path.Combine(folder, "导出结果.txt"), false, new UTF8Encoding(true)) { AutoFlush = true };
-        report.WriteLine($"Ripper · 全部会话导出\n共 {conversations.Count} 个会话；范围为开始导出时采集记录中的有消息会话。\n");
+        using var report = new StreamWriter(Path.Combine(folder, "聊天记录.html"), false, new UTF8Encoding(true)) { AutoFlush = true };
+        report.WriteLine($"<!doctype html><html lang=zh-CN><meta charset=utf-8><title>全部会话</title><body><h1>全部会话</h1><p>共 {conversations.Count} 个会话</p><ul>");
+        static string H(string text) => System.Net.WebUtility.HtmlEncode(text);
         int succeeded = 0, failed = 0;
         for (int i = 0; i < conversations.Count; i++)
         {
@@ -41,17 +42,17 @@ internal static class BatchExporter
             if (failure == null)
             {
                 succeeded++;
-                report.WriteLine($"成功：{conversation.Name}\n目录：{Path.GetFileName(destination)}\n");
+                report.WriteLine($"<li>成功：<a href=\"{Uri.EscapeDataString(Path.GetFileName(destination!))}/聊天记录.html\">{H(conversation.Name)}</a> · 目录：{H(Path.GetFileName(destination!))}</li>");
             }
             else
             {
                 failed++;
-                report.WriteLine($"失败：{conversation.Name}\n目录：{(destination == null ? "未创建" : Path.GetFileName(destination))}\n原因：{failure.Message}\n");
+                report.WriteLine($"<li>失败：{H(conversation.Name)} · 目录：{H(destination == null ? "未创建" : Path.GetFileName(destination))} · 原因：{H(failure.Message)}</li>");
             }
             progress.Report(new("导出全部会话", i + 1, conversations.Count, $"成功 {succeeded} · 失败 {failed}"));
         }
         var result = new BatchExportResult(succeeded, failed);
-        report.WriteLine(result.Summary);
+        report.WriteLine($"</ul><p>{H(result.Summary)}</p></body></html>");
         return result;
     }
 }

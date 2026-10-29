@@ -13,8 +13,13 @@ internal static class ExportFileLocatorSelfTest
         string relative = "附件/" + new string('a', 64) + "/计划 [v1] #1% & '最终'.txt";
         string path = Path.Combine(folder, relative.Replace('/', '\\'));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllText(path, "合成附件");
-        File.WriteAllText(Path.Combine(folder, "聊天记录.html"), "合成页面");
-        var index = ExportFileLocator.WriteIndex(folder, [relative]);
+        var index = ExportFileLocator.CreateIndex([relative]);
+        void WritePage(string directory)
+        {
+            using var html = new StreamWriter(Path.Combine(directory, "聊天记录.html"));
+            ExportFileLocator.WriteEmbeddedIndex(html, index);
+        }
+        WritePage(folder);
         string Request(string file, string? id = null) => $"{ExportFileLocator.Scheme}://file/{id ?? index.Id}?path=" + Uri.EscapeDataString(new Uri(file).AbsoluteUri);
         string? revealed = null;
         ExportFileLocator.Locate(Request(path), value => revealed = value);
@@ -25,7 +30,7 @@ internal static class ExportFileLocatorSelfTest
 
         string moved = Path.Combine(root, "整体移动后的导出 中文 #%"); Directory.Move(folder, moved);
         path = Path.Combine(moved, relative.Replace('/', '\\'));
-        check("导出目录移动后通过新页面路径和原索引继续定位", ExportFileLocator.Resolve(Request(path)) == path && !File.ReadAllText(Path.Combine(moved, ExportFileLocator.IndexName)).Contains(root));
+        check("导出目录移动后通过新页面路径和原索引继续定位", ExportFileLocator.Resolve(Request(path)) == path && !File.ReadAllText(Path.Combine(moved, "聊天记录.html")).Contains(root));
         bool Reject(string request)
         {
             bool opened = false;
@@ -36,11 +41,17 @@ internal static class ExportFileLocatorSelfTest
         check("网络路径网页路径和系统目录不作为文件定位目标", Reject($"ripper-locate://file/{index.Id}?path=" + Uri.EscapeDataString("file://server/share/file.txt")) && Reject($"ripper-locate://file/{index.Id}?path=" + Uri.EscapeDataString("https://example.com/file")) && Reject(Request(Environment.ProcessPath!)));
         string other = Path.Combine(Path.GetDirectoryName(path)!, "未导出.txt"); File.WriteAllText(other, "合成其他文件");
         check("不在导出清单中的文件及已删除附件不会打开目录", Reject(Request(other)) && Reject(Request(path + ".missing")));
-        string indexPath = Path.Combine(moved, ExportFileLocator.IndexName);
-        File.WriteAllText(indexPath, "invalid json");
+        string indexPath = Path.Combine(moved, "聊天记录.html");
+        File.WriteAllText(indexPath, "<script type=\"application/json\" id=\"ripper-file-index\">invalid json</script>\n");
         bool corrupt = Reject(Request(path)); File.Delete(indexPath);
         check("定位索引损坏或缺失时给出失败并保留普通目录访问", corrupt && Reject(Request(path)) && Directory.Exists(Path.GetDirectoryName(path)));
-        File.WriteAllText(indexPath, JsonSerializer.Serialize(index));
+        WritePage(moved);
+        check("新导出定位索引嵌入HTML无需额外JSON文件", !File.Exists(Path.Combine(moved, ExportFileLocator.IndexName)) && ExportFileLocator.Resolve(Request(path)) == path);
+        File.WriteAllText(indexPath, "旧版页面");
+        string legacyPath = Path.Combine(moved, ExportFileLocator.IndexName);
+        File.WriteAllText(legacyPath, JsonSerializer.Serialize(index));
+        check("历史独立JSON索引的导出仍可定位", ExportFileLocator.Resolve(Request(path)) == path);
+        File.Delete(legacyPath); WritePage(moved);
         string junction = Path.Combine(root, "定位目录联接");
         using (var link = Process.Start(new ProcessStartInfo("cmd.exe", $"/d /c mklink /J \"{junction}\" \"{moved}\"") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true })!)
         {

@@ -11,13 +11,37 @@ internal static class ExportFileLocator
     internal const string Scheme = "ripper-locate";
     internal const string IndexName = "ripper-files.json";
 
-    internal static ExportFileIndex WriteIndex(string folder, IEnumerable<string?> files)
+    private const string IndexPrefix = "<script type=\"application/json\" id=\"ripper-file-index\">";
+    internal static ExportFileIndex CreateIndex(IEnumerable<string?> files) =>
+        new(Guid.NewGuid().ToString("N"), files.OfType<string>().Distinct(StringComparer.Ordinal).ToArray());
+
+    internal static void WriteEmbeddedIndex(TextWriter html, ExportFileIndex index) =>
+        html.WriteLine(IndexPrefix + JsonSerializer.Serialize(index) + "</script>");
+
+    private static ExportFileIndex? ReadIndex(string root)
     {
-        var index = new ExportFileIndex(Guid.NewGuid().ToString("N"), files.OfType<string>().Distinct(StringComparer.Ordinal).ToArray());
-        string path = Path.Combine(folder, IndexName);
-        if (File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) throw new IOException("文件定位索引不可写入。");
-        File.WriteAllText(path, JsonSerializer.Serialize(index));
-        return index;
+        string htmlPath = Path.Combine(root, "聊天记录.html");
+        if (!File.Exists(htmlPath) || (File.GetAttributes(htmlPath) & FileAttributes.ReparsePoint) != 0) return null;
+        // The index precedes the messages. Bound scanning so a broken page cannot
+        // make a protocol request read an unbounded archive into memory.
+        using var reader = new StreamReader(htmlPath);
+        const int limit = 64 * 1024 * 1024;
+        var line = new System.Text.StringBuilder();
+        for (int read = 0; read < limit; read++)
+        {
+            int next = reader.Read();
+            if (next < 0) break;
+            if (next != '\n') { line.Append((char)next); continue; }
+            string text = line.ToString().TrimEnd('\r'); line.Clear();
+            if (text.StartsWith(IndexPrefix, StringComparison.Ordinal))
+                return text.EndsWith("</script>", StringComparison.Ordinal)
+                    ? JsonSerializer.Deserialize<ExportFileIndex>(text[IndexPrefix.Length..^9]) : null;
+            if (text.StartsWith("<div class=window", StringComparison.Ordinal)) break;
+        }
+        // Keep file-location links in older exports usable.
+        var legacy = new FileInfo(Path.Combine(root, IndexName));
+        return legacy.Exists && legacy.Length <= limit && (legacy.Attributes & FileAttributes.ReparsePoint) == 0
+            ? JsonSerializer.Deserialize<ExportFileIndex>(File.ReadAllText(legacy.FullName)) : null;
     }
 
     internal static bool Register()
@@ -63,12 +87,8 @@ internal static class ExportFileLocator
             throw new InvalidDataException(unavailable);
         for (FileSystemInfo? item = new FileInfo(path); item != null; item = item is FileInfo info ? info.Directory : ((DirectoryInfo)item).Parent)
             if ((item.Attributes & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException(unavailable);
-        string indexPath = Path.Combine(root, IndexName);
-        var indexFile = new FileInfo(indexPath);
-        if (!indexFile.Exists || indexFile.Length > 64 * 1024 * 1024 || (indexFile.Attributes & FileAttributes.ReparsePoint) != 0
-            || !File.Exists(Path.Combine(root, "聊天记录.html"))) throw new InvalidDataException(unavailable);
         ExportFileIndex? index;
-        try { index = JsonSerializer.Deserialize<ExportFileIndex>(File.ReadAllText(indexPath)); }
+        try { index = ReadIndex(root); }
         catch (JsonException ex) { throw new InvalidDataException(unavailable, ex); }
         if (index?.Id != id.ToString("N") || index.Files == null || !index.Files.Contains(relative, StringComparer.Ordinal))
             throw new InvalidDataException(unavailable);
